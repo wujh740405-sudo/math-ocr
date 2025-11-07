@@ -1,52 +1,56 @@
 from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-import uvicorn
-import base64
-import requests
+import pytesseract
+from PIL import Image
+import io
 import os
 
 app = FastAPI()
 
-# -------------------------------
-# ① 挂载 static 文件夹，用于访问前端网页
-# -------------------------------
+# ✅ 1. 挂载静态文件目录
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# -------------------------------
-# ② 首页路由：打开 OCR 上传界面
-# -------------------------------
+# ✅ 2. 首页（访问根路径时自动显示 index.html）
 @app.get("/", response_class=HTMLResponse)
-async def read_index():
-    try:
-        with open("static/ocr.html", "r", encoding="utf-8") as f:
-            return f.read()
-    except FileNotFoundError:
-        return HTMLResponse("<h2>⚠️ 没找到 static/ocr.html 文件，请确认路径。</h2>", status_code=404)
+async def serve_index():
+    index_path = "static/index.html"
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    else:
+        return HTMLResponse("<h3>⚠️ static/index.html 未找到</h3>", status_code=404)
 
-# -------------------------------
-# ③ OCR 识别接口
-# -------------------------------
+# ✅ 3. OCR 页面
+@app.get("/ocr.html", response_class=HTMLResponse)
+async def serve_ocr():
+    ocr_path = "static/ocr.html"
+    if os.path.exists(ocr_path):
+        return FileResponse(ocr_path)
+    else:
+        return HTMLResponse("<h3>⚠️ static/ocr.html 未找到</h3>", status_code=404)
+
+# ✅ 4. OCR 接口
 @app.post("/api/ocr")
-async def ocr_api(file: UploadFile = File(...)):
+async def ocr_image(file: UploadFile = File(...)):
     try:
-        # 读取上传图片
-        content = await file.read()
-        image_base64 = base64.b64encode(content).decode("utf-8")
+        image_bytes = await file.read()
+        image = Image.open(io.BytesIO(image_bytes))
 
-        # 调用 Mathpix OCR（可替换为 DeepSeek）
-        api_key = os.getenv("MATHPIX_API_KEY", "")
-        headers = {"app_id": "your_app_id", "app_key": api_key}
-        data = {"src": f"data:image/png;base64,{image_base64}", "formats": ["text"]}
+        # 自动识别中英文
+        text = pytesseract.image_to_string(image, lang="chi_sim+eng")
 
-        response = requests.post("https://api.mathpix.com/v3/text", json=data, headers=headers)
-        return response.json()
+        # 返回识别结果
+        return {"text": text.strip()}
 
     except Exception as e:
-        return JSONResponse(content={"error": str(e)})
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
-# -------------------------------
-# ④ Render 自动运行 / 本地调试
-# -------------------------------
+# ✅ 5. 健康检查
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+# ✅ 6. 本地启动（Render 会自动忽略）
 if __name__ == "__main__":
+    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
