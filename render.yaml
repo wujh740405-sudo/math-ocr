@@ -1,10 +1,11 @@
 services:
   - type: web
-    name: deepseek-proxy
+    name: math-agent-proxy
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    startCommand: uvicorn server:app --host 0.0.0.0 --port 10000
     envVars:
       - key: DEEPSEEK_API_KEY
         sync: false
+
