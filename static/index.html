@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 数学老师 🎓</title>
+
+  <!-- ✅ KaTeX 数学公式支持 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, {
+      delimiters: [
+        {left: '$$', right: '$$', display: true},
+        {left: '\\[', right: '\\]', display: true},
+        {left: '$', right: '$', display: false},
+        {left: '\\(', right: '\\)', display: false}
+      ]
+    });"></script>
+
+  <style>
+    body {
+      font-family: "Microsoft YaHei", sans-serif;
+      background-color: #f0f2f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 0;
+      height: 100vh;
+    }
+
+    h1 {
+      color: #1e3a8a;
+      margin-top: 20px;
+    }
+
+    #chat-box {
+      width: 90%;
+      max-width: 700px;
+      height: 70vh;
+      background: #fff;
+      border-radius: 15px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      padding: 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .msg {
+      padding: 10px 14px;
+      border-radius: 12px;
+      margin: 8px 0;
+      max-width: 90%;
+      white-space: pre-wrap;
+      line-height: 1.6;
+    }
+
+    .user {
+      align-self: flex-end;
+      background: #2563eb;
+      color: white;
+      border-bottom-right-radius: 0;
+    }
+
+    .bot {
+      align-self: flex-start;
+      background: #f3f4f6;
+      color: #111827;
+      border-bottom-left-radius: 0;
+    }
+
+    #input-area {
+      width: 90%;
+      max-width: 700px;
+      display: flex;
+      gap: 10px;
+      margin: 15px 0;
+    }
+
+    textarea {
+      flex-grow: 1;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      font-size: 16px;
+      resize: none;
+      height: 60px;
+    }
+
+    button {
+      width: 100px;
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    button:hover {
+      background-color: #1d4ed8;
+    }
+
+    .typing {
+      color: #9ca3af;
+      font-style: italic;
+    }
+
+    strong {
+      color: #111;
+    }
+
+    .msg.bot h3 {
+      color: #1e40af;
+      margin: 10px 0 5px 0;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>🧠 AI 数学老师</h1>
+
+  <div id="chat-box">
+    <div class="msg bot">你好，我是你的 AI 数学老师，请输入一个数学题 👇</div>
+  </div>
+
+  <div id="input-area">
+    <textarea id="input" placeholder="例如：已知 f(x)=x²-3x+2，求单调区间"></textarea>
+    <button id="send">发送</button>
+  </div>
+
+  <script>
+    const chatBox = document.getElementById("chat-box");
+    const input = document.getElementById("input");
+    const sendBtn = document.getElementById("send");
+
+    // 🔧 文本清理函数（自动格式化 AI 返回的文字）
+    function cleanText(text) {
+      return text
+        .replace(/\\/g, "\\") // 修复多余反斜杠
+        .replace(/\*{2}(.+?)\*{2}/g, "<strong>$1</strong>") // 加粗 **内容**
+        .replace(/^---$/gm, "<hr>") // --- 换成分割线
+        .replace(/\n\s*\n/g, "<br>") // 双换行变段落
+        .replace(/【|】/g, "") // 去掉中括号
+        .trim();
+    }
+
+    // ✅ 添加消息气泡并渲染 LaTeX
+    function addMessage(text, sender) {
+      const msg = document.createElement("div");
+      msg.classList.add("msg", sender);
+      msg.innerHTML = cleanText(text);
+      chatBox.appendChild(msg);
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      // 渲染公式
+      if (window.renderMathInElement) {
+        renderMathInElement(msg, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "\\[", right: "\\]", display: true },
+            { left: "$", right: "$", display: false },
+            { left: "\\(", right: "\\)", display: false }
+          ]
+        });
+      }
+    }
+
+    sendBtn.addEventListener("click", async () => {
+      const query = input.value.trim();
+      if (!query) return;
+
+      addMessage(query, "user");
+      input.value = "";
+
+      const typing = document.createElement("div");
+      typing.classList.add("msg", "bot", "typing");
+      typing.innerText = "AI 正在思考中...";
+      chatBox.appendChild(typing);
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      try {
+        const response = await fetch("https://math-agent-proxy.onrender.com/call_deepseek", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-PROXY-KEY": "mysecret123"
+          },
+          body: JSON.stringify({ query })
+        });
+
+        const data = await response.json();
+        typing.remove();
+
+        const answer = data.choices?.[0]?.message?.content || "⚠️ AI 没有返回结果。";
+        addMessage(answer, "bot");
+      } catch (err) {
+        typing.remove();
+        addMessage("❌ 请求失败，请检查网络或服务器状态。", "bot");
+      }
+    });
+  </script>
+</body>
+</html>
