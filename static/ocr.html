@@ -1,210 +1,83 @@
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>AI 数学老师（图片 OCR + 自动讲解）</title>
-
-  <!-- KaTeX -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
-    onload="renderMathInElement(document.body, { delimiters: [{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}] });"></script>
-
+  <meta charset="UTF-8">
+  <title>🧮 数学题 OCR 识别 (调试版)</title>
   <style>
-    body{font-family: "Microsoft YaHei",sans-serif;background:#f3f4f6;margin:0;padding:20px;display:flex;flex-direction:column;align-items:center}
-    h1{color:#1e3a8a}
-    #container{width:100%;max-width:900px}
-    #chat-box{background:#fff;border-radius:12px;padding:16px;height:50vh;overflow:auto;box-shadow:0 6px 18px rgba(0,0,0,0.06)}
-    .msg{padding:10px 14px;border-radius:10px;margin:8px 0;max-width:85%;white-space:pre-wrap}
-    .user{align-self:flex-end;background:#2563eb;color:#fff;margin-left:auto;border-bottom-right-radius:0}
-    .bot{align-self:flex-start;background:#f3f4f6;color:#111;border-bottom-left-radius:0}
-    #controls{display:flex;gap:8px;margin-top:12px;align-items:flex-start}
-    textarea{flex:1;height:70px;border-radius:8px;padding:10px;border:1px solid #ddd;resize:none}
-    button{padding:10px 14px;border-radius:8px;border:0;background:#2563eb;color:#fff;cursor:pointer}
-    input[type=file]{display:none}
-    .small{font-size:13px;color:#666;margin-top:6px}
-    .ocr-block{background:#fff;border-radius:8px;padding:10px;margin-top:10px;border:1px solid #eee}
-    .progress{font-size:13px;color:#999}
+    body {
+      font-family: "Segoe UI", "PingFang SC", sans-serif;
+      text-align: center;
+      background: #f5f8fb;
+      padding: 40px;
+    }
+    h1 { color: #004aad; }
+    #result {
+      margin-top: 20px;
+      padding: 20px;
+      border-radius: 10px;
+      background: white;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      width: 80%;
+      margin-left: auto;
+      margin-right: auto;
+      text-align: left;
+      white-space: pre-wrap;
+    }
+    #debug {
+      color: #666;
+      margin-top: 15px;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
-  <div id="container">
-    <h1>🤖 AI 数学老师（支持图片识别）</h1>
+  <h1> 数学题 OCR 识别</h1>
 
-    <div id="chat-box">
-      <div class="msg bot">你好，我是 AI 数学老师，可以识别题目图片并生成分步讲解。试试上传一张题目照片吧。</div>
-    </div>
+  <input type="file" id="fileInput" accept="image/*">
+  <button onclick="uploadImage()">识别图片</button>
 
-    <div id="controls">
-      <textarea id="text-input" placeholder="也可以直接输入题目，例如：已知 f(x)=x^2-3x+2，求单调区间"></textarea>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <button id="send-text">发送文本</button>
-        <label style="display:inline-block">
-          <input id="file-input" type="file" accept="image/*" />
-          <button id="choose-file">上传图片</button>
-        </label>
-        <button id="camera-btn">拍照（移动端）</button>
-      </div>
-    </div>
+  <div id="result">识别结果将在这里显示</div>
+  <div id="debug"></div>
 
-    <div class="small">提示：建议拍照使题目清晰且光线均匀。若题为手写或复杂公式，建议使用商用 OCR（Mathpix）。</div>
-    <div id="ocr-area"></div>
-  </div>
+  <script>
+    async function uploadImage() {
+      const fileInput = document.getElementById("fileInput");
+      const resultBox = document.getElementById("result");
+      const debugBox = document.getElementById("debug");
 
-<script>
-/* ========== 配置区 ========== */
-const API_BASE = "https://math-agent-proxy.onrender.com"; // <- 替换为你的 Render 域名
-const PROXY_KEY = "mysecret123"; // <- 如果你在服务端设置了 PROXY_KEY，请保持一致
-const MAX_UPLOAD_MB = 4; // 客户端限制文件大小
-/* ============================ */
-
-const chatBox = document.getElementById('chat-box');
-const textInput = document.getElementById('text-input');
-const sendTextBtn = document.getElementById('send-text');
-const fileInput = document.getElementById('file-input');
-const chooseFileBtn = document.getElementById('choose-file');
-const cameraBtn = document.getElementById('camera-btn');
-const ocrArea = document.getElementById('ocr-area');
-
-function addMessage(html, cls='bot') {
-  const el = document.createElement('div');
-  el.className = 'msg ' + cls;
-  el.innerHTML = html;
-  chatBox.appendChild(el);
-  chatBox.scrollTop = chatBox.scrollHeight;
-}
-
-// 简洁清理函数（可按需增强）
-function cleanServerText(t){
-  return t.replace(/\r\n/g,'\n').replace(/\n{2,}/g,'\n\n').trim();
-}
-
-/* ========== 文本发送 ========== */
-sendTextBtn.addEventListener('click', async ()=>{
-  const q = textInput.value.trim();
-  if(!q) return;
-  addMessage(`<strong>你：</strong><br>${q}`, 'user');
-  textInput.value='';
-  addMessage('<em>AI 正在思考中……</em>', 'bot');
-  try {
-    const resp = await fetch(API_BASE + '/call_deepseek', {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'X-PROXY-KEY': PROXY_KEY
-      },
-      body: JSON.stringify({ query: q })
-    });
-    const j = await resp.json();
-    // DeepSeek 返回路径可能不同，以下是常见结构：
-    const ans = j.choices?.[0]?.message?.content || JSON.stringify(j, null, 2);
-    addMessage(`<strong>AI：</strong><br>${escapeHtml(cleanServerText(ans))}`, 'bot');
-    // 渲染公式
-    if(window.renderMathInElement) renderMathInElement(chatBox);
-  } catch(e){
-    addMessage('❌ 请求失败：'+ e.message, 'bot');
-  }
-});
-
-/* ========== 文件上传（含客户端压缩） ========== */
-// 把 File 对象压缩到指定像素宽度（保持图片清晰度同时减小体积）
-function resizeImage(file, maxWidth=1200) {
-  return new Promise((resolve, reject)=>{
-    const img = new Image();
-    const reader = new FileReader();
-    reader.onload = e=>{
-      img.onload = ()=>{
-        const canvas = document.createElement('canvas');
-        const scale = Math.min(1, maxWidth / img.width);
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(blob=>{
-          resolve(blob);
-        }, 'image/jpeg', 0.85);
-      };
-      img.onerror = reject;
-      img.src = e.target.result;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-async function uploadAndSolve(file) {
-  if(!file) return;
-  if(file.size > MAX_UPLOAD_MB * 1024 * 1024) {
-    addMessage('⚠️ 文件太大，请压缩或选小图（建议 < '+MAX_UPLOAD_MB+'MB）', 'bot');
-    return;
-  }
-
-  addMessage(`<strong>你上传了一张图片</strong>`, 'user');
-  const loading = document.createElement('div'); loading.className='msg bot typing'; loading.innerText='图片上传并识别中……';
-  chatBox.appendChild(loading); chatBox.scrollTop = chatBox.scrollHeight;
-
-  try {
-    // 客户端压缩（可选）
-    const blob = await resizeImage(file, 1200);
-
-    const fd = new FormData();
-    fd.append('image', blob, file.name);
-
-    const resp = await fetch(API_BASE + '/ocr_and_solve', {
-      method:'POST',
-      body: fd,
-      headers: {
-        'X-PROXY-KEY': PROXY_KEY
+      if (!fileInput.files.length) {
+        resultBox.textContent = "⚠️ 请先选择一张图片";
+        return;
       }
-    });
-    const j = await resp.json();
-    loading.remove();
 
-    // j 应包含 { ocr: {...}, deepseek: {...} }
-    const ocr = j.ocr || {};
-    const deep = j.deepseek || j.deepseek || null;
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+      resultBox.textContent = "正在识别中，请稍候...";
+      debugBox.textContent = "";
 
-    // 展示 OCR 文本与 LaTeX（若有）
-    let ocrHtml = `<div class="ocr-block"><strong>OCR 识别（纯文本）：</strong><pre>${escapeHtml(ocr.text||ocr.plain||'无')}</pre>`;
-    if(ocr.latex) ocrHtml += `<strong>OCR 识别（LaTeX）：</strong><pre>${escapeHtml(ocr.latex)}</pre>`;
-    ocrHtml += `</div>`;
-    addMessage(ocrHtml, 'bot');
+      try {
+        const res = await fetch("http://127.0.0.1:8000/api/ocr", {
+          method: "POST",
+          body: formData
+        });
 
-    // 展示 DeepSeek 结果
-    const ans = deep?.choices?.[0]?.message?.content || JSON.stringify(deep || j, null, 2);
-    addMessage(`<strong>AI 讲解：</strong><br>${escapeHtml(cleanServerText(ans))}`, 'bot');
+        debugBox.textContent = `📡 状态码: ${res.status}`;
 
-    // 渲染 KaTeX
-    if(window.renderMathInElement) renderMathInElement(chatBox);
-  } catch (e) {
-    loading.remove();
-    addMessage('❌ OCR 或 求解 失败：'+ e.message, 'bot');
-  }
-}
+        if (!res.ok) {
+          resultBox.textContent = `❌ 识别失败，状态码: ${res.status}`;
+          const errText = await res.text();
+          debugBox.textContent += `\n服务器返回: ${errText}`;
+          return;
+        }
 
-// 处理文件选择
-fileInput.addEventListener('change', ()=> {
-  const f = fileInput.files[0];
-  if(!f) return;
-  uploadAndSolve(f);
-});
+        const data = await res.json();
+        resultBox.textContent = data.text || JSON.stringify(data, null, 2);
 
-// 绑定“上传”按钮在某些浏览器中触发文件选择
-chooseFileBtn.addEventListener('click', ()=> fileInput.click());
-
-/* ========== 移动端拍照（简易） ========== */
-cameraBtn.addEventListener('click', ()=> {
-  // 在移动端可直接触发 file input，某些手机会打开相机
-  fileInput.setAttribute('accept','image/*;capture=camera');
-  fileInput.click();
-});
-
-// === 工具函数 ===
-function escapeHtml(s){
-  if(!s) return '';
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
-}
-</script>
+      } catch (err) {
+        resultBox.textContent = "❌ 请求失败: " + err.message;
+        debugBox.textContent = "⚙️ 详细错误信息: " + err.stack;
+      }
+    }
+  </script>
 </body>
 </html>

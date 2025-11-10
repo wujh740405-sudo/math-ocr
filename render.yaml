@@ -1,11 +1,11 @@
 services:
   - type: web
-    name: math-agent-proxy
+    name: math-ocr
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn server:app --host 0.0.0.0 --port 10000
+    region: singapore
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn server:app --host 0.0.0.0 --port 10000"
     envVars:
-      - key: DEEPSEEK_API_KEY
-        sync: false
-
+      - key: PYTHON_VERSION
+        value: 3.10.12
