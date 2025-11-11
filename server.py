@@ -1,5 +1,17 @@
+"""
+AI 数学老师 - 后端服务
+支持：
+  ✅ 图片 OCR 识别  (POST /api/ocr)
+  ✅ 文字题解析      (POST /api/parse)
+  ✅ AI 数学求解     (POST /api/solve)
+  ✅ 健康检查接口    (GET /health)
+兼容：
+  ✅ 本地调试（自动打开浏览器）
+  ✅ Render 云端自动部署
+"""
+
 from fastapi import FastAPI, File, UploadFile, Request
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from PIL import Image
@@ -7,35 +19,49 @@ import pytesseract
 import io
 import os
 import json
+import webbrowser
 import requests
 
-# =========================
+# ==================================================
 # 初始化 FastAPI 应用
-# =========================
-app = FastAPI()
+# ==================================================
+app = FastAPI(title="AI 数学老师", version="2.0")
 
-# -------------------- 基础配置 --------------------
-# Tesseract 安装路径（Render 上不会用到，本地用）
+# ==================================================
+# 系统环境检测
+# ==================================================
+IS_RENDER = bool(os.environ.get("RENDER"))
+LOCAL_MODE = not IS_RENDER
+
+# Tesseract OCR 路径（仅本地需要）
 TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-TESSDATA_PATH = r"C:\Program Files\Tesseract-OCR\tessdata"
-
 if os.name == "nt" and os.path.exists(TESSERACT_PATH):
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
 
-# -------------------- 静态页面 --------------------
+# ==================================================
+# 静态文件与首页
+# ==================================================
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    index_path = "static/ocr.html"
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return HTMLResponse("<h3>⚠️ 找不到 ocr.html 文件</h3>", status_code=404)
+    """
+    首页：跳转到 OCR 页面或返回提示
+    """
+    ocr_path = "static/ocr.html"
+    if os.path.exists(ocr_path):
+        return FileResponse(ocr_path)
+    return HTMLResponse("<h3>⚠️ 找不到 static/ocr.html</h3>", status_code=404)
 
 
-# -------------------- OCR 接口 --------------------
+# ==================================================
+# 接口 1：图片识别 /api/ocr
+# ==================================================
 @app.post("/api/ocr")
 async def ocr_image(file: UploadFile = File(...)):
+    """
+    接收图片并用 Tesseract OCR 识别
+    """
     try:
         image_bytes = await file.read()
         image = Image.open(io.BytesIO(image_bytes))
@@ -45,7 +71,9 @@ async def ocr_image(file: UploadFile = File(...)):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-# -------------------- 文字解析接口 --------------------
+# ==================================================
+# 接口 2：数学题文字解析 /api/parse
+# ==================================================
 @app.post("/api/parse")
 async def parse_question(request: Request):
     """
@@ -58,7 +86,7 @@ async def parse_question(request: Request):
         if not question:
             return JSONResponse(content={"error": "缺少 text 字段"}, status_code=400)
 
-        # 简单模拟解析逻辑
+        # 简单模拟智能标签识别
         tags = []
         if "f(x)" in question or "函数" in question or "二次" in question or "x^2" in question:
             tags = ["函数-单调性", "二次函数"]
@@ -84,7 +112,9 @@ async def parse_question(request: Request):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-# -------------------- AI 数学求解接口 --------------------
+# ==================================================
+# 接口 3：AI 数学求解 /api/solve
+# ==================================================
 class SolveReq(BaseModel):
     problem: str
     level: str = "高中"
@@ -92,7 +122,7 @@ class SolveReq(BaseModel):
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 
 PROMPT_TEMPLATE = """
-你是高中数学教练。下面给出一道题目，要求你**只输出一个 JSON**，不要多余其他语言、不要解释。
+你是高中数学教练。下面给出一道题目，要求你**只输出一个 JSON**。
 JSON 格式严格如下：
 {
   "problem": "<原题文本>",
@@ -130,6 +160,9 @@ def call_deepseek(prompt: str):
 
 @app.post("/api/solve")
 async def solve(req: SolveReq):
+    """
+    调用 DeepSeek API 求解数学题
+    """
     try:
         prompt = PROMPT_TEMPLATE.format(problem=req.problem, level=req.level)
         output = call_deepseek(prompt)
@@ -138,15 +171,22 @@ async def solve(req: SolveReq):
         return {"error": str(e)}
 
 
-# -------------------- 健康检查 --------------------
+# ==================================================
+# 接口 4：健康检查 /health
+# ==================================================
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
 
-# -------------------- 启动 --------------------
+# ==================================================
+# 主程序入口
+# ==================================================
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
-    print(f"🚀 启动中... 端口: {port}")
+    print(f"🚀 启动中... 模式: {'Render 云端' if IS_RENDER else '本地开发'} 端口: {port}")
+    if LOCAL_MODE:
+        # 本地自动打开浏览器
+        webbrowser.open(f"http://127.0.0.1:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
