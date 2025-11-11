@@ -38,6 +38,26 @@
 
   <div id="result">识别结果将在这里显示</div>
   <div id="debug"></div>
+<button onclick="analyzeProblem()">AI讲解这道题</button>
+<pre id="solveResult"></pre>
+
+<script>
+async function analyzeProblem() {
+  const text = document.getElementById("result").textContent.trim();
+  if (!text) {
+    alert("请先上传图片并完成识别！");
+    return;
+  }
+
+  const res = await fetch("/api/solve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ problem: text, level: "高中" })
+  });
+  const data = await res.json();
+  document.getElementById("solveResult").textContent = JSON.stringify(data, null, 2);
+}
+</script>
 
   <script>
     async function uploadImage() {
