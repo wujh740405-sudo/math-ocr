@@ -212,8 +212,14 @@ async def health():
 
 
 # -------------------- 本地运行 --------------------
+# 健康检查接口
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 if __name__ == "__main__":
     import uvicorn
     print("🚀 启动 OCR 服务中...")
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+
 
