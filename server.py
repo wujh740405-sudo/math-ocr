@@ -27,6 +27,17 @@ import requests
 # ==================================================
 app = FastAPI(title="AI 数学老师", version="2.0")
 
+from fastapi.middleware.cors import CORSMiddleware
+
+# 允许跨域（前端 JS 访问 API）
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 生产环境可换成具体域名
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # ==================================================
 # 系统环境检测
 # ==================================================

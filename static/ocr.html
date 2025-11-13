@@ -2,101 +2,30 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <title>🧮 数学题 OCR 识别 (调试版)</title>
+  <title>AI 数学OCR系统</title>
   <style>
-    body {
-      font-family: "Segoe UI", "PingFang SC", sans-serif;
-      text-align: center;
-      background: #f5f8fb;
-      padding: 40px;
-    }
-    h1 { color: #004aad; }
-    #result {
-      margin-top: 20px;
-      padding: 20px;
-      border-radius: 10px;
-      background: white;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-      width: 80%;
-      margin-left: auto;
-      margin-right: auto;
-      text-align: left;
-      white-space: pre-wrap;
-    }
-    #debug {
-      color: #666;
-      margin-top: 15px;
-      font-size: 13px;
-    }
+    body { font-family: Arial; padding: 20px; background: #f8f9fa; }
+    #result { white-space: pre-wrap; background: #fff; padding: 10px; border-radius: 8px; margin-top: 20px; }
   </style>
 </head>
 <body>
-  <h1> 数学题 OCR 识别</h1>
+  <h2>📸 数学OCR识别演示</h2>
+  <input type="file" id="fileInput" accept="image/*"><br><br>
+  <button onclick="upload()">开始识别</button>
 
-  <input type="file" id="fileInput" accept="image/*">
-  <button onclick="uploadImage()">识别图片</button>
-
-  <div id="result">识别结果将在这里显示</div>
-  <div id="debug"></div>
-<button onclick="analyzeProblem()">AI讲解这道题</button>
-<pre id="solveResult"></pre>
-
-<script>
-async function analyzeProblem() {
-  const text = document.getElementById("result").textContent.trim();
-  if (!text) {
-    alert("请先上传图片并完成识别！");
-    return;
-  }
-
-  const res = await fetch("/api/solve", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ problem: text, level: "高中" })
-  });
-  const data = await res.json();
-  document.getElementById("solveResult").textContent = JSON.stringify(data, null, 2);
-}
-</script>
+  <div id="result">识别结果将显示在这里</div>
 
   <script>
-    async function uploadImage() {
-      const fileInput = document.getElementById("fileInput");
-      const resultBox = document.getElementById("result");
-      const debugBox = document.getElementById("debug");
-
-      if (!fileInput.files.length) {
-        resultBox.textContent = "⚠️ 请先选择一张图片";
-        return;
-      }
-
+    async function upload() {
+      const fileInput = document.getElementById('fileInput');
+      const file = fileInput.files[0];
+      if (!file) return alert("请先选择图片");
       const formData = new FormData();
-      formData.append("file", fileInput.files[0]);
-      resultBox.textContent = "正在识别中，请稍候...";
-      debugBox.textContent = "";
+      formData.append("file", file);
 
-      try {
-        const res = await fetch("http://127.0.0.1:8000/api/ocr", {
-          method: "POST",
-          body: formData
-        });
-
-        debugBox.textContent = `📡 状态码: ${res.status}`;
-
-        if (!res.ok) {
-          resultBox.textContent = `❌ 识别失败，状态码: ${res.status}`;
-          const errText = await res.text();
-          debugBox.textContent += `\n服务器返回: ${errText}`;
-          return;
-        }
-
-        const data = await res.json();
-        resultBox.textContent = data.text || JSON.stringify(data, null, 2);
-
-      } catch (err) {
-        resultBox.textContent = "❌ 请求失败: " + err.message;
-        debugBox.textContent = "⚙️ 详细错误信息: " + err.stack;
-      }
+      const res = await fetch("/api/ocr", { method: "POST", body: formData });
+      const data = await res.json();
+      document.getElementById("result").innerText = data.text || data.error || "识别失败";
     }
   </script>
 </body>
