@@ -12,7 +12,6 @@ import io
 import os
 import json
 import requests
-import webbrowser
 
 # ==================================================
 # Render 自动安装 Linux Tesseract
@@ -31,34 +30,36 @@ if os.environ.get("RENDER"):
         )
         print("✅ Tesseract 安装完成")
 
-    # 设置 Tesseract 命令路径
     pytesseract.pytesseract.tesseract_cmd = TESS_PATH
     print(f"📌 使用 Tesseract 路径：{TESS_PATH}")
 
-# Windows 本地路径（Render 不会用）
+# Windows 本地路径
 if os.name == "nt":
     WIN_TESS_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     if os.path.exists(WIN_TESS_PATH):
         pytesseract.pytesseract.tesseract_cmd = WIN_TESS_PATH
-        print("📌 本地模式使用 Windows Tesseract")
+        print("📌 本地使用 Windows Tesseract")
 
 # ==================================================
 # FastAPI 初始化
 # ==================================================
 app = FastAPI(title="AI 数学老师", version="2.0")
 
-# 静态页面
+# 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
-async def home():
-    ocr_path = "static/ocr.html"
-    if os.path.exists(ocr_path):
-        return FileResponse(ocr_path)
-    return HTMLResponse("<h3>⚠️ 找不到 static/ocr.html</h3>", status_code=404)
+async def index():
+    """
+    注意：你的页面文件是 static/index.html，不是 ocr.html
+    """
+    file_path = "static/index.html"
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return HTMLResponse("<h3>⚠️ 未找到 static/index.html</h3>", status_code=404)
 
 # ==================================================
-# 1. OCR 接口
+# OCR 接口
 # ==================================================
 @app.post("/api/ocr")
 async def ocr_image(file: UploadFile = File(...)):
@@ -73,7 +74,7 @@ async def ocr_image(file: UploadFile = File(...)):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 # ==================================================
-# 2. 数学题解析
+# 数学题解析
 # ==================================================
 @app.post("/api/parse")
 async def parse_question(request: Request):
@@ -83,8 +84,9 @@ async def parse_question(request: Request):
     if not question:
         return JSONResponse({"error": "缺少 text 字段"}, status_code=400)
 
+    # 简单分类示例
     tags = []
-    if "f(x)" in question or "函数" in question:
+    if "函数" in question:
         tags = ["函数-单调性", "二次函数"]
     elif "导数" in question:
         tags = ["导数-求导", "导数-极值"]
@@ -100,7 +102,7 @@ async def parse_question(request: Request):
     }
 
 # ==================================================
-# 3. AI 数学求解（DeepSeek）
+# DeepSeek 解题
 # ==================================================
 class SolveReq(BaseModel):
     problem: str
@@ -164,7 +166,5 @@ async def health():
 # ==================================================
 if __name__ == "__main__":
     import uvicorn
-
     port = int(os.environ.get("PORT", 10000))
-    print(f"🚀 启动本地服务 http://127.0.0.1:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
