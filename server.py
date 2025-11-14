@@ -36,9 +36,19 @@ IS_RENDER = bool(os.environ.get("RENDER"))
 LOCAL_MODE = not IS_RENDER
 
 # Tesseract OCR 路径（仅本地使用）
-TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-if os.name == "nt" and os.path.exists(TESSERACT_PATH):
+# 判断是否在 Render 环境（Linux）
+IS_RENDER = os.environ.get("RENDER") == "true"
+
+if IS_RENDER:
+    # 在 Render 服务器，使用你上传的 Linux tesseract
+    TESSERACT_PATH = "/opt/render/project/src/tesseract-linux/tesseract"
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+else:
+    # 在 Windows 本地
+    TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.path.exists(TESSERACT_PATH):
+        pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+
 
 # ==================================================
 # 静态文件（网页前端）
