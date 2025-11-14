@@ -124,6 +124,23 @@ JSON 示例：
 题目：{problem}
 难度：{level}
 """
+import subprocess
+from fastapi import FastAPI
+
+# 假设 app 已定义
+@app.get("/debug/tesseract")
+async def debug_tesseract():
+    """
+    返回 tesseract 的版本信息，或错误信息（用于诊断）
+    仅用于调试，部署稳定后可删除此接口。
+    """
+    try:
+        out = subprocess.check_output(["tesseract", "--version"], stderr=subprocess.STDOUT, text=True)
+        # 只返回首行版本信息，避免输出太长
+        first_line = out.splitlines()[0] if out else "no output"
+        return {"tesseract_version": first_line}
+    except Exception as e:
+        return {"error": str(e)}
 
 def call_deepseek(prompt: str):
     if not DEEPSEEK_API_KEY:
