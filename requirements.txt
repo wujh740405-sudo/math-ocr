@@ -2,5 +2,7 @@ fastapi
 uvicorn
 requests
 python-multipart
-pytesseract
 Pillow
+rapidocr-paddle
+opencv-python-headless
+numpy

@@ -1,5 +1,5 @@
 """
-AI 数学老师 - 后端服务（Render 自动安装 Linux Tesseract 版本）
+AI 数学老师 - 后端服务（使用 RapidOCR，无需 Tesseract）
 """
 
 from fastapi import FastAPI, File, UploadFile, Request
@@ -7,74 +7,56 @@ from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from PIL import Image
-import pytesseract
+import numpy as np
 import io
 import os
 import json
 import requests
+import webbrowser
 
 # ==================================================
-# Render 自动安装 Linux Tesseract
+# 使用 RapidOCR（Render 免费实例可运行）
 # ==================================================
-if os.environ.get("RENDER"):
-    import subprocess
-
-    TESS_PATH = "/usr/bin/tesseract"   # Render apt-get 默认安装路径
-
-    # 检查 tesseract 是否已安装
-    if not os.path.exists(TESS_PATH):
-        print("🔧 Render 环境未安装 Tesseract，正在自动安装中...")
-        subprocess.run(
-            ["bash", "-c", "apt-get update && apt-get install -y tesseract-ocr"],
-            check=False
-        )
-        print("✅ Tesseract 安装完成")
-
-    pytesseract.pytesseract.tesseract_cmd = TESS_PATH
-    print(f"📌 使用 Tesseract 路径：{TESS_PATH}")
-
-# Windows 本地路径
-if os.name == "nt":
-    WIN_TESS_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    if os.path.exists(WIN_TESS_PATH):
-        pytesseract.pytesseract.tesseract_cmd = WIN_TESS_PATH
-        print("📌 本地使用 Windows Tesseract")
+from rapidocr_paddle import RapidOCR
+ocr = RapidOCR()
 
 # ==================================================
 # FastAPI 初始化
 # ==================================================
 app = FastAPI(title="AI 数学老师", version="2.0")
 
-# 挂载静态文件
+# 静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
-async def index():
-    """
-    注意：你的页面文件是 static/index.html，不是 ocr.html
-    """
-    file_path = "static/index.html"
-    if os.path.exists(file_path):
-        return FileResponse(file_path)
-    return HTMLResponse("<h3>⚠️ 未找到 static/index.html</h3>", status_code=404)
+async def home():
+    ocr_path = "static/ocr.html"
+    if os.path.exists(ocr_path):
+        return FileResponse(ocr_path)
+    return HTMLResponse("<h3>⚠️ 找不到 static/ocr.html</h3>", status_code=404)
 
 # ==================================================
-# OCR 接口
+# 1. OCR 识别接口（无需 Tesseract）
 # ==================================================
 @app.post("/api/ocr")
 async def ocr_image(file: UploadFile = File(...)):
     try:
-        image_bytes = await file.read()
-        image = Image.open(io.BytesIO(image_bytes))
+        img_bytes = await file.read()
+        image = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        img_np = np.array(image)
 
-        text = pytesseract.image_to_string(image, lang="chi_sim+eng")
-        return {"text": text.strip()}
+        result, _ = ocr(img_np)
+        if not result:
+            return {"text": ""}
+
+        text = "\n".join([line[1] for line in result])
+        return {"text": text}
 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 # ==================================================
-# 数学题解析
+# 2. 数学题解析
 # ==================================================
 @app.post("/api/parse")
 async def parse_question(request: Request):
@@ -84,9 +66,8 @@ async def parse_question(request: Request):
     if not question:
         return JSONResponse({"error": "缺少 text 字段"}, status_code=400)
 
-    # 简单分类示例
     tags = []
-    if "函数" in question:
+    if "f(x)" in question or "函数" in question:
         tags = ["函数-单调性", "二次函数"]
     elif "导数" in question:
         tags = ["导数-求导", "导数-极值"]
@@ -102,7 +83,7 @@ async def parse_question(request: Request):
     }
 
 # ==================================================
-# DeepSeek 解题
+# 3. 调用 DeepSeek AI 求解数学题
 # ==================================================
 class SolveReq(BaseModel):
     problem: str
@@ -162,9 +143,11 @@ async def health():
     return {"status": "ok"}
 
 # ==================================================
-# 本地启动
+# 本地调试
 # ==================================================
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.environ.get("PORT", 10000))
+    print(f"🚀 本地服务启动 http://127.0.0.1:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
